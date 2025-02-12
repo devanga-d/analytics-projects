@@ -1,0 +1,691 @@
+---
+title: "Diamond Price Regression Analysis"
+subtitle: "Final Project Report"
+author: "Devanga Deheragoda (s3992417)</br> Kashish Gupta (s4021816)</br> Samay Jain (s3963844)"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE, warning=FALSE, message = FALSE}
+library(readr)
+library(dplyr)
+library(zoo)
+library(MPV)
+library(GGally)
+library(stats)
+library(leaps)
+library(DAAG)
+library(corrplot)
+library(pheatmap)
+library(gplots)
+library(RColorBrewer)
+library(viridis)
+library(forecast)
+library(gridExtra)
+library(car)
+library(caret)
+library(MASS)
+library(orcutt)
+#library(FitAR)
+```
+
+# Introduction
+
+# Methodology 
+
+# Data set
+Explain data set
+
+```{r, message=FALSE}
+Diamond <- read_csv("C:/Users/devan/Downloads/diamonds.csv")
+head(Diamond)
+```
+
+
+# Data preprocessing
+This section focuses on analyzing the initial descriptive statistics of the dataset and dealing with any inconsistencies. This includes checking for invalid data and removing unnecessary variables.
+
+## Removing redundant columns and Renaming columns
+```{r}
+# Removing redundant columns
+Diamond <- Diamond[, -c(1)]
+# Renaming column names
+colnames(Diamond) <- c("Carat", "Cut", "Color", "Clarity", "Depth", "Top_width_ratio", "Price_USD", "Length", "Width", "Height")
+```
+
+## Descriptive Statistics
+```{r}
+# Descriptive statistics of data
+summary(Diamond)
+```
+This table presents key statistics for various attributes of diamonds in the dataset. Carat weight ranges from 0.20 to 5.01, with a mean of around 0.80. Diamond dimensions, including length, width, and height, vary widely, reflecting diverse shapes and sizes. Prices ranges from $326 to $18,823, with a mean of roughly $3,933.
+
+## Inconsistencies in data
+```{r, warning = FALSE}
+# Missing values in the data
+sum(is.na(Diamond))
+
+# Duplicated values 
+sum(duplicated(Diamond))
+
+# Removing the duplicate values
+Diamond <- Diamond[!duplicated(Diamond), ]
+
+# Removing any invalid values
+if (any(Diamond$Length == 0 | Diamond$Width == 0 | Diamond$Height == 0)) {
+  Diamond <- Diamond[!(Diamond$Length == 0 | Diamond$Width == 0 | Diamond$Height == 0), ]
+}
+
+# Dropping Length, Width, and Height columns
+Diamond <- Diamond[, -c(8:10)]
+
+# Data set dimension
+dim(Diamond)
+```
+Missing and duplicate values are eliminated from the dataset to ensure accuracy and a more precise analysis. Additionally, since depth is derived from the dimensions of length, width, and height, these columns, along with any invalid values within them, will be removed.
+
+# Exploratory Data Analysis
+
+## Univariate analysis
+
+### Diamond price distribution
+```{r, warning=FALSE}
+ggplot(Diamond, aes(x = Price_USD)) +
+  geom_histogram(binwidth = 500, fill = "maroon", color = "black") +
+  labs(title = "Distribution of Diamond Prices", x = "Price", y = "Count") 
+```
+
+Based on the above plot, it can be identified that the distribution is highly right-skewed (positively skewed), indicating that most diamonds are on the lower end of the price scale, with fewer diamonds as the price increases.
+
+Prices extend from close to $0 up to nearly $20,000. However, the count of diamonds significantly drops as the price increases, particularly after $5,000.
+
+There are some diamonds priced much higher, reaching up to around $20,000, but these are rare compared to the overall dataset.
+
+This distribution suggests that the diamond market has a large number of lower-priced diamonds and a small number of very expensive ones. This is typical for many markets where luxury goods are involved, with a few high-priced items among many lower-priced ones.
+
+### Transformation
+Afterward, to address the highly skewed nature of the data, a Box-Cox transformation is performed on the price variable.
+```{r, results='hide', message  = FALSE, echo = FALSE, fig.show='hide'}
+# Apply the boxcox function from the MASS package to find the optimal lambda
+boxcox_result <- boxcox(lm(Diamond$Price_USD ~ 1))
+```
+
+```{r}
+# Optimal lambda
+lambda <- boxcox_result$x[which.max(boxcox_result$y)]
+lambda
+```
+Given that the lambda value is close to zero, a log transformation is also applied to further normalize the data.
+
+
+```{r}
+Diamond$Log_price <- log(Diamond$Price_USD)
+```
+
+```{r, message = FALSE}
+ggplot(Diamond, aes(x = Log_price)) +
+  geom_histogram( fill = "maroon", color = "black") +
+  labs(title = "Distribution of Diamond Prices", x = "Price", y = "Count") 
+```
+* The above plot showcases the distribution after the log transformation and it can be seen that skewness has slightly reduced making the distribution more normalized but still skewed.
+
+* While there is still a higher concentration in lower range prices, the transformation has made the spread more uniform which brings out the subtle differences within the lower price ranges.
+
+```{r}
+# Bar plot for cut
+plot1 = ggplot(Diamond, aes(x = Cut)) +
+  geom_bar(fill = "purple") +
+  labs(title = "Distribution of Diamond Cut", x = "Cut", y = "Count") +
+  theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")) +
+  theme(plot.title = element_text(size = 12)) +
+  theme(axis.text = element_text(size = 10)) +
+  theme(axis.title = element_text(size = 10))
+
+# Bar plot for color
+plot2 = ggplot(Diamond, aes(x = Color)) +
+  geom_bar(fill = "orange") +
+  labs(title = "Distribution of Diamond Color", x = "Color", y = "Count") +
+  theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")) +
+  theme(plot.title = element_text(size = 12)) +
+  theme(axis.text = element_text(size = 10)) +
+  theme(axis.title = element_text(size = 10))
+
+# Bar plot for clarity
+plot3 = ggplot(Diamond, aes(x = Clarity)) +
+  geom_bar(fill = "turquoise") +
+  labs(title = "Distribution of Diamond Clarity", x = "Clarity", y = "Count") +
+  theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm")) +
+  theme(plot.title = element_text(size = 12)) +
+  theme(axis.text = element_text(size = 10)) +
+  theme(axis.title = element_text(size = 10))
+
+grid.arrange(plot1, plot2, plot3, ncol = 2)
+
+```
+* In the distribution of diamond cuts, the ideal cut dominates the market, followed by premium cuts very good cuts. Good cuts are comparatively fewer while fair cuts make up the smallest portion. This distribution highlights a prevalence of high-quality cuts, with ideal and premium cuts leading the market, indicating a preference for superior craftsmanship and brilliance among consumers.
+
+* The 2nd bar chart represents the distribution of diamond colour. It reveals that G is the most common color grade for diamonds, followed closely by F, indicating nearly colorless stones. Grades H and I are also frequent, suggesting slightly more noticeable tints. D and J are the least common, representing the rarest and most valuable diamonds, and the least valuable stones with more visible tints, respectively. 
+
+* The 3rd bar chart displays the distribution of diamond clarity. The chart reveals that diamonds with SI2 (Slightly Included 2) and SI1 (Slightly Included 1) clarity grades are the most common, followed by VS1 (Very Slightly Included 1) and VS2 (Very Slightly Included 2). 
+
+```{r}
+Diamond$Cut <- factor(Diamond$Cut, levels = c("Fair", "Good", "Very Good", "Premium", "Ideal"))
+
+plot5 <- ggplot(Diamond, aes(x = Carat, y = Log_price, color = Cut)) + 
+  geom_point() + 
+  labs(title = "Scatter Plot of Carat vs Diamond price based on cut",
+       x = "Carat", 
+       y = "Price_USD") +  
+  scale_x_continuous(limits = c(0, 4), breaks = seq(0, 4, by = 0.50)) +
+  theme_minimal() 
+
+### Scatter plot between Carat, Clarity and Diamond price 
+Diamond$Clarity <- factor(Diamond$Clarity, levels = c("I1", "SI2", "SI1", "VS2", "VS1", "VVS2", "VVS1", "IF"))
+plot6 <- ggplot(Diamond, aes(x = Carat, y = Price_USD, color = Clarity)) + 
+  geom_point() + 
+  labs(title = "Scatter Plot of Carat vs Diamond price based on clarity",
+       x = "Carat", 
+       y = "Price_USD") +  
+  scale_x_continuous(limits = c(0, 4), breaks = seq(0, 4, by = 0.50)) +
+  theme_minimal() 
+grid.arrange(plot5, plot6, ncol = 1)
+```
+
+The first scatter plot illustrates the relationship between carat weight and diamond price based on cut. The plot shows a positive correlation between carat weight and price, meaning that larger diamonds generally command higher prices. However, there is also a wide variation in prices for diamonds with similar carat weights, likely due to differences in other factors like cut, color, and clarity. 
+
+The second scatter plot depicts the relationship between carat weight and diamond price, by the clarity grade of the diamond. Similar to the previous plot, there is a positive correlation between carat weight and price, but with significant variation in prices for diamonds with similar carat weights. It can be seen from the graph that higher clarity grades generally occupy the higher price range for a given carat weight, while lower clarity grades tend to have lower prices.
+
+## Label encoding for categorical variables
+```{r}
+# Encoding for Cut, Color, and Clarity
+Diamond <- Diamond %>%
+  mutate(
+    Cut = as.integer(factor(Cut, levels = c("Fair", "Good", "Very Good", "Premium", "Ideal"))),
+    Color = as.integer(factor(Color, levels = c("J", "I", "H", "G", "F", "E", "D"))),
+    Clarity = as.integer(factor(Clarity, levels = c("I1", "SI2", "SI1", "VS2", "VS1", "VVS2", "VVS1", "IF")))
+  )
+head(Diamond)
+```
+
+# Correlation plot
+
+```{r}
+cor_matrix <- cor(Diamond)
+
+# Plot the heatmap with the purple color scale
+heatmap.2(cor_matrix, trace = "none", col = magma(256), cellnote = round(cor_matrix, 2), notecol = "black", density.info = "none", dendrogram = "none", Rowv = FALSE, Colv = FALSE)
+```
+
+This correlation matrix reveals the relationships between various attributes of diamonds. 
+* Carat weight exhibits a strong positive correlation with price, indicating that heavier diamonds tend to be more expensive. 
+* Cut quality demonstrates a moderate negative correlation with price, suggesting that diamonds with superior cuts may fetch lower prices. 
+* Color and clarity show weak negative correlations with price, implying that higher grades in these attributes might lead to slightly lower prices. 
+* Depth and top width ratio exhibit weak correlations, indicating a subtle relationship between these characteristics
+
+# Train and test split data
+```{r}
+set.seed(100)
+TrainIndex <- createDataPartition(Diamond$Price_USD, p = 0.8, list = FALSE, times = 1)
+Diamond_Train <- Diamond[TrainIndex, ]
+Diamond_Test <-  Diamond[-TrainIndex, ]
+```
+
+To conduct model validation, the dataset will be split into 80% for the training set and 20% for the test set, based on the price.
+
+# Multiple linear regression
+```{r, warning = FALSE}
+Diamond_model <- lm(Diamond_Train$Log_price ~ Carat + factor(Cut) + factor(Color) + factor(Clarity) + Depth + Top_width_ratio , data = Diamond_Train)
+```
+
+The initial linear model was fitted using all the predictor variables. Upon testing (as detailed in the appendix), it was found that the following assumptions were violated:
+
+* The relationship between variables is not linear.
+* The residuals are not normally distributed.
+* Autocorrelation is present.
+* Homoscedasticity is not satisfied.
+
+Therefore, ploynomial regression model will be used to address the abovementioned issues. 
+
+```{r}
+# Fitting a polynomial regression
+poly_model <- lm(Log_price ~ Carat + I(Carat^2) + factor(Cut) + factor(Color) + factor(Clarity) + Depth + Top_width_ratio, data = Diamond_Train)
+```
+
+Given that "Carat" has the highest correlation with price, its squared term is included to better capture the potential non-linear relationship between carat size and price. 
+
+```{r}
+# Removing infuential values
+Diamond_Train_pre <- Diamond_Train[-c(21882, 22048, 21642), ]
+```
+
+The following influential values were identified in the polynomial model and the following extreme values were found, hence these were removed to normalise the data and reduce bias in the analysis. 
+
+```{r}
+# Fitting a polynomial regression on processed data
+poly_model2 <- lm(Log_price ~ Carat + I(Carat^2) + factor(Cut) + factor(Color) + factor(Clarity) + Depth + Top_width_ratio, data = Diamond_Train_pre)
+summary(poly_model2)
+```
+R-squared: Indicates that approximately 97.68% of the variance in log price is explained by the predictors in the model, indicating a very strong fit of the model to the data.
+
+** Adjusted R-squared:The value is the same as the R-squared value, suggesting that the  model is well-fitted without overfitting.
+
+F-statistic: High F-statistic and very low p-value of less than 0.05 indicate that the overall model is highly significant and fits the data well.
+
+The coefficients from the polynomial regression model highlight several significant predictors of diamond prices.
+
+Significant predictors include Carat and its quadratic term I(Carat^2), indicating a strong, non-linear relationship with price. 
+
+Each unit increase in Carat is associated with a substantial increase in log price (4.34 units), highlighting Carat as a significant predictor of diamond price.
+
+The quadratic term for Carat shows a negative coefficient and is highly significant with a p value of less than 0.05.
+
+Categorical factors such as Cut, Color, and Clarity also show significant effects across their respective levels with p-values of less than 0.05, illustrating their substantial impact on price variation. 
+
+Depth has a negative coefficient and is statistically significant with a p value of less than 0.05, suggesting that deeper diamonds tend to have slightly lower prices.
+
+Top_width_ratio shows a marginally insignificant negative coefficient with a p value of 0.0852, indicating that this predictor may not strongly influence diamond prices in this model.
+
+
+## ANOVA test
+```{r, warning = FALSE}
+anova(poly_model2)
+```
+The ANOVA table confirms that Carat, its quadratic term, and categorical factors (Cut, Color, Clarity) are highly significant predictors of Log_price in the polynomial regression model. Depth also contributes significantly, to a lesser extent. Top_width_ratio, while included in the model, does not show strong statistical significance in predicting diamond prices based on the given attributes. Overall, the model fits the data well with a pvalue of less than 0.05, indicating its reliability in explaining variations in diamond prices.
+
+# Model adequacy
+
+```{r, warning = FALSE}
+par(mfrow = c(2,2))
+# Test 1: Residual plots
+plot(poly_model2)
+```
+
+Residuals vs Fitted plot: The residuals are more evenly scattered around zero across the range of fitted values, indicating a better fit to the data. 
+
+Q-Q plot: The Q-Q plot shows that the residuals follow the theoretical quantiles more closely, especially in the tails. This suggests that the residuals are closer to being normally distributed. 
+
+Scale-Location plot: The plot shows a more consistent shape, indicating a better fit. 
+
+Residuals vs Leverage plot: The residuals are more evenly scattered around the horizontal band, suggesting no significant influence of leverage on the residuals. 
+
+```{r, warning = FALSE}
+# Test 2: Test of constant variance
+cat("\nTest of constant variance:\n")
+ncv_test = ncvTest(poly_model2)
+print(ncv_test)
+```
+The test result indicates that there is evidence to reject the null hypothesis that the variance of the residuals is constant (homoscedasticity). With a p-value of 0.0025, which is less than 0.05, it can be concluded that the variance of the residuals is not constant across the range of fitted values.
+
+```{r, warning = FALSE}
+# Test 3: Test of Autocorrelation
+cat("\nTest of Autocorrelation:\n")
+DBtest = durbinWatsonTest(poly_model2)
+print(DBtest)
+```
+H0: There is no autocorrelation in the residuals.
+H1: There is autocorrelation in the residuals.
+
+The test indicates strong evidence against the null hypothesis (Ho) that there is no autocorrelation in the residuals. The autocorrelation coefficient of 0.389 and a p-value of 0 suggest that there is a significant positive autocorrelation at lag 1 in the residuals of the model. 
+
+```{r, warning = FALSE}
+model_residuals <- residuals(poly_model2)
+# Test 4: Test of normality
+ks.test(model_residuals, "pnorm", mean(model_residuals),    sd(model_residuals))
+```
+H0: The residuals are normally distributed.
+H1: The residuals are not normally distributed
+
+The test result provides strong evidence against the null hypothesis that the residuals are normally distributed. With a p-value significantly less than any reasonable significance level (such as 0.05), the null hypothesis is rejected in favor of the alternative hypothesis that the distribution of residuals deviates from normality.
+
+```{r, warning = FALSE}  
+# Test 5: Components residual plots
+cat("\nComponents residual plots:\n")
+crPlots(poly_model2)
+```
+In the above plots, the residuals appear to be more randomly distributed with no obvious patterns, suggesting a better fit to the data.
+
+The residual plots for the "Cut" and "Color" factors show relatively random scatter around zero, suggesting that the model adequately accounts for the effects of these variables.
+
+However, the residual plot for "Clarity" exhibits a somewhat structured pattern, with higher clarity levels (lower factor levels) tending to have positive residuals. 
+
+The residuals for Depth and Top-Width-ratio show no clear pattern, suggesting an adequate fit. 
+
+
+```{r, warning = FALSE}
+# Test 6: Test of multicollinearity
+cat("\nTest of multicollinearity:\n")
+Multicoll_test = vif(poly_model2)
+print(Multicoll_test)
+```
+All variables have GVIF values less than 5, suggesting minimal multicollinearity concerns. Therefore, there is no strong evidence of multi-collinearity among the predictor variables in the model.
+
+```{r, warning = FALSE}
+# Test 7: Outliers test
+cat("\nOutliers test:\n")
+outlier_test = outlierTest(poly_model2)
+print(outlier_test)
+```
+
+# Test to correct autocorrelation
+```{r}
+cochrane_orcutt_model_poly2 <- cochrane.orcutt(poly_model2)
+summary(cochrane_orcutt_model_poly2)
+```
+
+# Variable selection
+
+## All possible regression subsets
+
+```{r}
+Diamond_model_r <- leaps::regsubsets(Log_price ~ Carat + I(Carat^2) + factor(Cut) + factor(Color) + factor(Clarity) + Depth + Top_width_ratio, data = Diamond_Train_pre)
+subset_result <- summary(Diamond_model_r)
+subset_result
+```
+
+```{r}
+plot(Diamond_model_r, scale = "Cp")
+```
+```{r}
+Diamond_model_RSS <- subset_result$rss
+Diamond_model_r2 <- subset_result$rsq
+Diamond_model_Cp <- subset_result$cp
+Diamond_model_BIC <- subset_result$bic
+Diamond_model_Adj_r2 <- subset_result$adjr2
+cbind(Diamond_model_RSS, Diamond_model_r2 , Diamond_model_Cp , Diamond_model_BIC, Diamond_model_Adj_r2)
+```
+
+```{r}
+which.min(Diamond_model_Cp)
+which.min(Diamond_model_BIC)
+which.max(Diamond_model_Adj_r2) 
+```
+# Regression subsets
+```{r}
+reg_subset_model <- lm(Diamond_Train_pre$Log_price ~ Carat + I(Carat^2) + factor(Color) + factor(Clarity), data = Diamond_Train_pre)
+reg_subset_result <- summary(reg_subset_model)
+reg_subset_result
+```
+## ANOVA test
+```{r, warning = FALSE}
+anova(reg_subset_model)
+```
+
+# Model adequacy
+```{r, warning = FALSE}
+par(mfrow = c(2,2))
+# Test 1: Residual plots
+plot(reg_subset_model)
+```
+
+```{r, warning = FALSE}
+# Test 2: Test of constant variance
+cat("\nTest of constant variance:\n")
+ncv_test = ncvTest(reg_subset_model)
+print(ncv_test)
+```
+
+```{r, warning = FALSE}
+# Test 3: Test of Autocorrelation
+cat("\nTest of Autocorrelation:\n")
+DBtest = durbinWatsonTest(reg_subset_model)
+print(DBtest)
+```
+
+```{r, warning = FALSE}
+model_residuals <- residuals(reg_subset_model)
+# Test 4: Test of normality
+ks.test(model_residuals, "pnorm", mean(model_residuals),    sd(model_residuals))
+```
+
+```{r, warning = FALSE}  
+# Test 5: Components residual plots
+cat("\nComponents residual plots:\n")
+crPlots(reg_subset_model)
+```
+
+```{r, warning = FALSE}
+# Test 6: Test of multicollinearity
+cat("\nTest of multicollinearity:\n")
+Multicoll_test = vif(reg_subset_model)
+print(Multicoll_test)
+```
+
+```{r, warning = FALSE}
+# Test 7: Outliers test
+cat("\nOutliers test:\n")
+outlier_test = outlierTest(reg_subset_model)
+print(outlier_test)
+```
+
+
+
+# Forward stepwise regression
+```{r}
+Diamond_forward <- regsubsets(Diamond_Train_pre$Log_price ~ Carat + + I(Carat^2) + factor(Cut) + factor(Color) + factor(Clarity) + Depth + Top_width_ratio, data = Diamond_Train_pre, method = "forward")
+summary_Diamond_forward <- summary(Diamond_forward)
+
+```
+
+```{r}
+Diamond_forward_model_Cp <- summary_Diamond_forward$cp
+Diamond_forward_model_BIC <- summary_Diamond_forward$bic
+Diamond_forward_model_Adj_r2 <- summary_Diamond_forward$adjr2
+```
+
+```{r}
+which.min(Diamond_forward_model_Cp)
+which.min(Diamond_forward_model_BIC)
+which.max(Diamond_forward_model_Adj_r2) 
+```
+Same model as in all possible subsets so didnt fit again and didnt do model adequacy check.
+
+# Backward stepwise
+
+```{r}
+Diamond_backward <- regsubsets(Diamond_Train_pre$Log_price ~ Carat + + I(Carat^2) + factor(Cut) + factor(Color) + factor(Clarity) + Depth + Top_width_ratio, data = Diamond_Train_pre, method = "backward")
+summary_Diamond_backward <- summary(Diamond_backward)
+
+```
+
+```{r}
+Diamond_backward_model_Cp <- summary_Diamond_backward$cp
+Diamond_backward_model_BIC <- summary_Diamond_backward$bic
+Diamond_backward_model_Adj_r2 <- summary_Diamond_backward$adjr2
+```
+
+```{r}
+which.min(Diamond_backward_model_Cp)
+which.min(Diamond_backward_model_BIC)
+which.max(Diamond_backward_model_Adj_r2) 
+```
+same model as all possible subsets and forward model, so didnt repeat the process.
+
+# Seqrep stepwise 
+```{r}
+Diamond_seqrep <- regsubsets(Diamond_Train_pre$Log_price ~ Carat +  I(Carat^2) + factor(Cut) + factor(Color) + factor(Clarity) + Depth + Top_width_ratio, data = Diamond_Train_pre, method = "seqrep")
+summary_Diamond_seqrep <- summary(Diamond_seqrep)
+
+```
+
+```{r}
+Diamond_seqrep_model_Cp <- summary_Diamond_seqrep$cp
+Diamond_seqrep_model_BIC <- summary_Diamond_seqrep$bic
+Diamond_seqrep_model_Adj_r2 <- summary_Diamond_seqrep$adjr2
+```
+
+```{r}
+which.min(Diamond_seqrep_model_Cp)
+which.min(Diamond_seqrep_model_BIC)
+which.max(Diamond_seqrep_model_Adj_r2) 
+```
+Same model as all possible, forward and backward so didn't fit. 
+
+```{r}
+DAAG::press(Diamond_model)
+DAAG::press(poly_model2)
+DAAG::press(reg_subset_model)
+```
+
+```{r}
+# Predict on the testing set
+predictions_full_model <- predict(Diamond_model, Diamond_Test)
+
+# Calculate performance metrics
+mse <- mean((predictions_full_model - Diamond_Test$Log_price)^2)
+rmse <- sqrt(mse)
+mae <- mean(abs(predictions_full_model - Diamond_Test$Log_price))
+
+# Print performance metrics
+cat("MSE:", mse, "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+```
+
+```{r}
+# Predict on the testing set
+predictions_poly_model2 <- predict(poly_model2, Diamond_Test)
+
+# Calculate performance metrics
+mse_poly <- mean((predictions_poly_model2 - Diamond_Test$Log_price)^2)
+rmse_poly <- sqrt(mse_poly)
+mae_poly <- mean(abs(predictions_poly_model2 - Diamond_Test$Log_price))
+
+# Print performance metrics
+cat("MSE:", mse_poly, "\n")
+cat("RMSE:", rmse_poly, "\n")
+cat("MAE:", mae_poly, "\n")
+```
+
+```{r}
+# Predict on the testing set
+predictions_subset_model <- predict(reg_subset_model, Diamond_Test)
+
+# Calculate performance metrics
+mse_reg_subset <- mean((predictions_subset_model - Diamond_Test$Log_price)^2)
+rmse_reg_subset <- sqrt(mse_reg_subset)
+mae_reg_subset <- mean(abs(predictions_subset_model - Diamond_Test$Log_price))
+
+# Print performance metrics
+cat("MSE:", mse_reg_subset, "\n")
+cat("RMSE:", rmse_reg_subset, "\n")
+cat("MAE:", mae_reg_subset, "\n")
+```
+
+# Reference
+
+# Appendix
+
+**Summary of data**
+```{r}
+str(Diamond)
+```
+
+**Diamond model summary**
+```{r}
+summary(Diamond_model)
+```
+* Statistical Measures
+
+** R-squared: The model has a high R-squared value of 0.88, indicating that approximately 88.84% of the variance in the log-transformed diamond prices is explained by the predictors included in the model. 
+
+** Adjusted R-squared:The value is very close to the R-squared value, suggesting that the  model is well-fitted without overfitting.
+
+** Residual Standard Error: This indicates the average amount that the log prices deviate from the regression line.
+
+** F-statistic: Reveals that the model is highly significant with a p value of less than 0.05. 
+
+* Coefficient Interpretations
+
+The regression model reveals that several predictors significantly influence the log-transformed price of diamonds
+
+** Notably, for each additional carat, the log price increases by approximately 2.192 units, indicating a strong positive relationship. 
+
+** Among the different cuts, Cut 5 shows the most significant effect, with a log price increase of 0.1046. 
+
+** The color of the diamond also has a substantial impact; for instance, Color 7 results in a 0.5814 increase in log price,           demonstrating a strong positive effect. 
+
+** Clarity significantly affects the log price, with Clarity level 8 showing the highest increase of 1.014 units. 
+
+** Additionally, the top-width ratio is positively associated with the log price, with an increase of 0.006649 for each unit. 
+
+These findings highlight the importance of carat, cut, color, clarity, and top-width ratio in determining diamond prices, while depth was found to be non-significant.
+
+
+```{r}
+par(mfrow = c(2,2))
+plot(Diamond_model)
+```
+* Residual vs Fitted: The plot indicates a potential  non-linear relationship that might not be fully captured by the model. 
+
+* Scale-Location: The upward trend and the spread of residuals increasing with the fitted values suggest heteroscedasticity, indicating that the variability of the residuals increases with the fitted values.
+
+* QQ Plot: It can be seen that there is a significant deviation of points, especially at the tails, indicating that the residuals are not normally distributed.
+
+* Residuals vs Leverage: It can be observed that there are high leverage and residuals indicating the presence of influential points. 
+
+
+**Polynomial fitted model**
+```{r}
+summary(poly_model)
+```
+Statistical Measures: 
+Residuals: The residuals have a mean close to zero and are spread between -0.8027 and 8.1660, indicating some variability but generally centered around zero.
+
+R-squared: Suggests that approximately 97.39% of the variability in the logarithm of prices is explained by the predictors in the model.
+
+Adjusted R-squared: The adjusted R-squared, which adjusts for the number of predictors in the model, is also 0.9739.
+
+F-statistic: The F-statistic of 7.638e+04 with a p value of less than 0.05 indicates that the overall model is statistically significant.
+
+Coefficients: 
+
+Carat stands out with a high positive coefficient, indicating that as carat weight increases, diamond prices rise significantly. The squared term of Carat, shows a negative coefficient, suggesting a decelerating effect on price as carat weight increases further.
+
+Factors like Cut, Color, and Clarity also show positive coefficients across their levels, indicating higher grades in these aspects correlate with higher predicted prices. 
+
+Depth has a negative coefficient, implying deeper diamonds are associated with slightly lower predicted prices. 
+However, Top_width_ratio's non-significant coefficient suggests it doesn't meaningfully predict price in this model. 
+
+```{r}
+par(mfrow = c(2,2))
+plot(poly_model)
+```
+Residuals vs Fitted: The pattern appears to be somewhat curved, suggesting a potential non-linear relationship that the model may not be capturing adequately.
+
+Q-Q Residuals: The deviation from the straight line indicates a potential violation of the normality assumption for the residuals.
+
+Scale-Location: The pattern suggests some heteroscedasticity (non-constant variance) in the residuals.
+
+Residuals vs Leverage: In this plot, there are 3 extreme values that can be identified that may skew the data, hence the model was run again after removing the values for a better fit. 
+
+
+**All possible subset BIC and adjusted r2 plot**
+```{r}
+plot(Diamond_model_r, scale = "bic")
+plot(Diamond_model_r, scale = "adjr2")
+```
+
+Based on the above plots, the subsets chosen by both BIC and adjr2 is the same comprised of Carat, Cut, Colour and Clarity. 
+
+**Stepwise regression summary**
+```{r}
+summary_Diamond_forward
+summary_Diamond_backward
+summary_Diamond_seqrep
+```
+The subset selection using three different methods (forward, backward, and sequential replacement) was performed to identify the most influential predictors of diamond prices (Log_price). 
+All methods consistently selected Carat, I(Carat^2), factors related to Cut, Color, and Clarity. Top_width_ratio and Depth was not consistently selected across the methods, indicating it may not significantly contribute to predicting diamond prices in this model.
+
+Forward selection started with Carat and progressively added factors from Cut, Color, and Clarity as they improved model fit. Backward elimination began with all predictors and removed Depth and Top_width_ratio while retaining the rest. 
+Sequential replacement confirmed the robustness of Carat, I(Carat^2), and the categorical factors in predicting diamond prices. 
+This process underscores the critical influence of Carat and quality factors (Cut, Color, Clarity) alongside the non-linear effect captured by I(Carat^2) in determining diamond prices.
+
+
+
+
+
+
