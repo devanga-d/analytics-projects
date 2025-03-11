@@ -1,0 +1,386 @@
+---
+title: "Time Series A1: Devanga Deheragoda"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2024-04-04"
+---
+# *Introduction*
+
+This report conducts an analysis of a share market trader's investment portfolio, with the main objective of determining the most suitable trend model using established model-building techniques. The investigation centers on selecting the optimal trend model from options including linear, quadratic, seasonal, and cosine models. The dataset consists of the returns (in AUD100) of the trader's investment portfolio over a span of 179 consecutive trading days within a single year.
+
+This approach would help assess different potential patterns and trends present in the data and select the model that provides the most accurate representation of the underlying dynamics. By considering a range of models, it can be ensured that the selected model effectively captures the complexity of the data and enables robust predictions for future market behavior.
+
+In order to select the best model for the analysis, statistical summaries comprising of the model's performance and the significance of its coefficients and distribution of residuals. Additionally,  The summary also highlights the overall fit of the model, as indicated by the R-squared value, which measures the proportion of variance explained by the model and the F-statistic which assesses the overall significance of the model.
+
+Moreover, further insights into the performance and adequacy of the model would be determined through the residual plot, which visualizes the differences between observed and predicted values, helping identify any patterns or trends in the residuals. Moreover, the Q-Q plot would help compare the distribution of residuals to a theoretical normal distribution, highlighting departures from normality. Meanwhile, the ACF plot reveals any patterns or correlations in the residuals over time, indicating potential issues with serial correlation or seasonality. 
+
+Once the best model is selected through the culmination of the above-mentioned methods,predictions would be generated for the upcoming 5 trading days to estimate the expected values over the near future.
+
+```{r setup, include=FALSE}
+rm(list=ls()) 
+library(TSA)
+```
+
+
+```{r}
+#*Read data into R*
+setwd("C:/Users/devan/OneDrive/Desktop")
+dataRaw <- read.csv("assignment1Data2024.csv", header = TRUE)
+```
+
+## Converting to time series 
+```{r}
+#*convert data to time series*
+traderInfo <- ts(dataRaw$x, frequency = 179)
+summary(traderInfo)
+```
+The summary statistics indicate that the returns of the investment portfolio exhibit a wide range of values, spanning from 49.167 to 214.611. The median return is 51.105, suggesting that half of the observations fall below this value. Additionally, the mean return is 57.043, indicating the average return over the observed period. The third quartile return is 117.781, indicating that 75% of the observations fall below this value. 
+
+### Plotting time series graph
+```{r}
+plot(traderInfo, xlab = "Trading Day", ylab = "Return (AUD 100)", type = 'o', main = "Figure 1: Portfolio Return Over Trading Days")
+```
+Upon initial analysis of the plot, the plot appears to be non-stationary. However, there is evidence that the time series displays a downward trend initially, followed by a subsequent upward trend as the year progresses. Notable fluctuations in variance are observed between days 90 to 110. Additionally, repetitive patterns in the data suggest the presence of seasonality, while the plot indicates characteristics of both moving average and autoregressive behavior. No intervention points are observed in the plot, indicating consistent behavior over time.
+
+### Examining the trend of the previous day
+In the absence of a clear trend observed from the time series plot, a scatter plot was employed to investigate the correlation between portfolio returns in the current year and the previous day. The analysis conducted revealed a clear upward trend in the dataset.
+
+```{r}
+#* Conducting the pearson correlation coefficient test*
+y = traderInfo
+x = zlag(traderInfo)
+index = 2:length(x)
+cor(y[index],x[index]) 
+```
+```{r}
+plot(y=traderInfo,x=zlag(traderInfo),ylab='Previous Return (AUD 100)', xlab='Trading Day', main = "Figure 2. Scatter plot of portfolio returns in previous days.")
+```
+
+Moreover, the correlation test between the trader's investment portfolio returns in the current and previous day revealed the correlation coefficient is approximately 0.987, indicating a very strong positive linear relationship. This suggests that there is a high degree of autocorrelation in the returns.
+
+### 2nd Lag
+```{r}
+x = zlag(zlag(traderInfo))
+index = 3:length(x)
+cor(y[index],x[index]) 
+```
+```{r}
+plot(y=traderInfo,x=x,ylab='Previous Return (AUD 100)', xlab='Trading Day', main = "Figure 2. Scatter plot of portfolio returns in second previous days.")
+```
+The plot suggest a clear trend and positive correlation between the current returns and the returns observed on the second previous day, suggesting a positive relationship.
+
+```{r}
+acf(traderInfo, lag.max = 50, main = 'Figure 3. ACF Plot of Trader Returns')
+```
+
+As evidenced from the ACF plot, there is a high magnitude of autocorrelation in the series.
+
+## Fitting the models
+### Linear Model
+
+```{r}
+t <- time(traderInfo)
+linear_model = lm(traderInfo ~ t) 
+summary(linear_model)
+```
+The analysis reveals that the model's coefficients estimate the intercept at 72.22086, with a decrease of approximately 0.16865 units per unit increase in time. However, the significance tests indicate that only the intercept is statistically significant (p = 0.001), as p < 0.05 while the coefficient for time is not statistically significant (p = 0.0881). Moreover, the model's ability to explain the variability in portfolio returns is limited, as indicated by the low multiple R-squared value of 0.01079. 
+ 
+* Plot for Linear Model *
+
+```{r}
+plot(traderInfo,type='o',ylab='Trader Return (AUD100)', xlab = "Trading Day", main = 'Figure 5:Fitted Linear model to portfolio returns')
+fitted.linear_model <- -72.22086 - 0.16865 *t
+lines(fitted.linear_model)
+abline(linear_model)
+```
+With reference to the plot above, it indicates a clear misalignment between the fitted line and the data points highlighting that the linear model does not accurately capture the underlying trend in the data. 
+
+* Residual Analysis *
+```{r}
+res.linear_model = rstudent(linear_model)
+plot(y = res.linear_model, x = as.vector(time(traderInfo)),xlab = 'Trading days', ylab='Standardized Residuals',type='l',main = "Figure 6: Standardised residuals from linear model.")
+```
+With reference to the above graph, there are no extreme outliers or interventions present in the residuals.
+
+```{r}
+hist(res.linear_model,xlab='Standardized Residuals', main = "Figure 7:Histogram of standardised residuals.")
+```
+The histogram is skewed to the right, suggesting that there is no normal distrbution.
+
+```{r}
+qqnorm(y=res.linear_model, main = "Figure 8:QQ plot of standardised residuals.")
+qqline(y=res.linear_model, col = 2, lwd = 1, lty = 2)
+```
+The proximity of the QQ-line to the diagonal line indicates that the residuals follow a normal distribution.
+
+```{r}
+shapiro.test(res.linear_model)
+```
+The shapiro test has a p-value of less than 5% (p=0.00001), suggesting that the residuals are not normally distributed. 
+
+```{r}
+acf(res.linear_model, main = "Figure 9:ACF of standardized residuals.")
+```
+The ACF plot shows significant autocorrelation, indicating that the residuals are not independent. 
+
+```{r}
+pacf(res.linear_model, main = "Figure 10:PACF of standardized residuals.")
+```
+There is slight partial autocorrelation in residuals indicating that there might be some remaining patterns or dependencies in the data that are not captured by the model.
+
+## Quadratic Model
+
+```{r}
+#Fitting the quadratic model
+t = time(traderInfo)
+t2 = t^2
+quadratic_model = lm(traderInfo~ t + t2) 
+summary(quadratic_model)
+```
+The model exhibits a high level of statistical significance as the p-value < 0.05 with an adjusted R-squared of 0.8523, indicating that approximately 85.23% of the variability in portfolio returns is explained by the model and the coefficients show that both the linear and quadratic terms have a highly significant impact on portfolio returns (p < 0.001). 
+
+* Quadratic Model Plot *
+
+```{r}
+fitted.quadratic_model <- fitted(quadratic_model)
+
+plot(ts(fitted.quadratic_model), ylim = c(min(c(fitted(quadratic_model), as.vector(traderInfo))), max(c(fitted(quadratic_model),as.vector(traderInfo)))),
+     ylab='y' , main = "Figure 11: Fitted quadratic curve to trader's returns series", type="l",lty=2,col="red")
+lines(as.vector(traderInfo),type="o")
+```
+It can be seen that the quadratic line closely follows the curvature of the original data, thus proving it to be a good fit. 
+
+* Residual Analysis *
+```{r}
+res.quadratic_model = rstudent(quadratic_model)
+plot(y = res.quadratic_model, x = as.vector(time(traderInfo)),xlab = 'Time', ylab='Standardized Residuals',type='l',main = "Figure 12: Standardised residuals from quadratic model.")
+```
+There are extreme values in the dataset that lie beyond the threshold of -2, indicating outliers.
+
+```{r}
+hist(res.quadratic_model,xlab='Standardized Residuals', main = "Figure 13:Histogram of standardised residuals.")
+```
+The histogram appears to be normally distributed, highlighting the normal distribution of residuals.
+
+```{r}
+qqnorm(y=res.quadratic_model, main = "Figure 14:QQ plot of standardised residuals.")
+qqline(res.quadratic_model, col = 2, lwd = 1, lty = 2)  # Adding the QQ line
+```
+Most QQ points fall closely along the diagnol line, suggesting normal distribution.
+
+```{r}
+shapiro.test(res.quadratic_model)
+```
+Further proof is accumulated through the shapiro-test where the p value is 0.05, suggesting that the residuals are normally distributed.
+
+```{r}
+acf(res.quadratic_model, main = "Figure 15:ACF of standardized residuals.")
+```
+There's significant auto correlation in data, suggesting that the residuals are dependent. 
+
+```{r}
+pacf(res.quadratic_model, main = "Figure 16:PACF of standardized residuals.")
+```
+The PACF plot reveals partial autocorrelation, suggesting that certain lags exhibit correlation that cannot be accounted for by earlier lags.
+
+## Seasonal model
+### Without Intercept
+```{r}
+observation_index <- 1:179
+
+day <- factor((observation_index - 1) %% 5 + 1, levels = 1:5, labels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"))
+seasonal_model <- lm(traderInfo~day-1)
+summary(seasonal_model)
+```
+
+The removal of the intercept term in the model allows for a more accurate representation of the seasonal trend in the data. The coefficient estimates for each day of the week indicate the average deviation from the overall mean return for that specific day, without the influence of an intercept. The significant coefficients and low p-values suggest that there is a relationship between the day of the week and the portfolio return. The residual analysis indicates that the model captures a substantial portion 41.2% of the variance in the data.
+
+```{r}
+fitted_seasonal_model <- fitted(seasonal_model)
+
+# Plot the original data and fitted values
+plot(traderInfo, type = "o", ylim = range(c(traderInfo, fitted_seasonal_model)), ylab = "Trader Info", xlab = "Time", main = "Figure 17:Fitted seasonal model without intercept to traders return series")
+lines(fitted_seasonal_model, col = "red")
+legend("topright", legend = c("Original Data", "Fitted Values"), col = c("black", "red"), lty = 1)
+```
+The plot above indicates a noticeable deviation of the fitted line from the original data, suggesting that the model may not provide an optimal fit.
+
+```{r}
+res.seasonal_model = rstudent(seasonal_model)
+plot(y = res.seasonal_model, x = as.vector(time(traderInfo)),xlab = 'Time', ylab='Standardized Residuals',type='l',main = "Figure 18:Standardised residuals from seasonal model without intercept.")
+```
+There are some notable outliers in the data, with values falling beyond the threshold of +2.
+
+```{r}
+# Histogram of standardized residuals
+hist(res.seasonal_model, xlab = 'Standardized Residuals', main = 'Figure 19:Histogram of Standardized Residuals')
+```
+The above plot seems to be slightly skewed to the left, suggesting an ommision of normal distribution of residuals.
+
+```{r}
+# QQ plot of standardized residuals
+qqnorm(res.seasonal_model, main = 'Figure 20:QQ Plot of Standardized Residuals')
+qqline(res.seasonal_model, col = 2, lwd = 1, lty = 2)
+```
+
+With reference to the above plot, majority of the QQ points does not fall on the diagonal line, suggesting that there is no normal distribution between the residuals.
+
+```{r}
+# Shapiro-Wilk test for normality
+shapiro.test(res.seasonal_model)
+```
+Given that the Shapiro test has a p value of less than 5%, it can be concluded that the residuals are not normally distributed.
+
+```{r}
+# ACF of standardized residuals
+acf(res.seasonal_model, main = 'Figure 21:ACF of Standardized Residuals')
+```
+The notable high autocorrelation in the data indicates a dependency among the residuals.
+
+```{r}
+# PACF of standardized residuals
+pacf(res.seasonal_model, main = 'Figure 22:PACF of Standardized Residuals')
+```
+Slight autocorrelation in the PACF model suggests that there are residual correlations at specific lags, indicating that certain past observations still influence the current residuals to some extent.
+
+## Fitting the seasonal model with intercept
+```{r}
+seasonal_model_intercept <- lm(traderInfo~day)
+summary(seasonal_model_intercept)
+```
+With reference to the above output, none of the coefficients are statistically significant, as evidenced by their high p-values. The model's overall fit is poor, as indicated by the very low R-squared value of 0.0004.
+
+```{r}
+fitted_seasonal_model_intercept <- fitted(seasonal_model_intercept)
+
+# Plot the original data and fitted values
+plot(traderInfo, type = "o", ylim = range(c(traderInfo, fitted_seasonal_model_intercept)), ylab = "Trader Info", xlab = "Time", main = "Figure 23:Fitted seasonal model with intercept to traders return series")
+lines(fitted_seasonal_model_intercept, col = "red")
+legend("topright", legend = c("Original Data", "Fitted Values"), col = c("black", "red"), lty = 1)
+```
+The model does not appear to be a good fit as it significantly varies from the original data. Given that the seasonal model with intercept has yielded to be a poor fit, residuals for the series would not be calcualted.
+
+
+## Fitting the cosine/harmonic model
+
+```{R}
+har.=harmonic(traderInfo,1)
+data <- data.frame(traderInfo,har.)
+model.traderInfo.har = lm(traderInfo ~ cos.2.pi.t. + sin.2.pi.t. , data = data)
+summary(model.traderInfo.har)
+```
+The p values obtained from the sine and cosine values are both statistically significant, (<0.05) suggesting a relationship in the portfolio returns.The residuals, which show how much the actual data points differ from the model's predictions, have a typical size of around 21.4.The high adjusted R-squared value suggests that the model explains about 90.31% of the variability in the data, indicating a good fit. 
+
+```{r}
+fitted.model.traderInfo.har <- fitted(model.traderInfo.har)
+
+plot(ts(fitted(model.traderInfo.har)), ylim = c(min(c(fitted(model.traderInfo.har),
+     as.vector(traderInfo))), max(c(fitted(model.traderInfo.har),as.vector(traderInfo)))),
+     ylab='y' , main = "Figure 24:Fitted harmonic curve to investment return series", type="l",lty=2,col="red")
+lines(as.vector(traderInfo),type="o")
+```
+Based on the above plot, it can be observed that the cosine line closely follows the curvature of the original data, thus proving it to be a good fit. 
+
+```{r}
+res.model.traderInfo.har = rstudent(model.traderInfo.har)
+
+plot(y = res.model.traderInfo.har, x = as.vector(time(traderInfo)),xlab = 'Time', ylab='Standardized Residuals',type='l',main = "Figure 25:Standardised residuals from harmonic model.")
+points(y=res.model.traderInfo.har,x=time(traderInfo), pch=as.vector(season(traderInfo)))
+```
+There are some extreme values that has gone beyond the threshold of +2 suggesting potential outliers.
+
+```{r}
+hist(res.model.traderInfo.har,xlab='Standardized Residuals', main = "Figure 26:Histogram of standardised residuals.")
+```
+The histogram is skewed to the right, suggesting that the residuals are not normally distributed.
+
+```{r}
+qqnorm(y=res.model.traderInfo.har, main = "Figure 27:QQ plot of standardised residuals.")
+qqline(y=res.model.traderInfo.har, col = 2, lwd = 1, lty = 2)
+```
+The QQ points only follows the diagonal line in the middle, however it deviates from the line at the begining and end. 
+
+```{r}
+shapiro.test(res.model.traderInfo.har)
+```
+The shapiro test has a p-value of 0.005, hence the residuals are not normally distributed.
+```{r}
+acf(res.model.traderInfo.har, main = "Figure 28:ACF of standardized residuals.")
+```
+
+The presence of significant autocorrelation at certain lags suggests that the residuals, still contain patterns that have not been adequately captured by the model. 
+
+```{r}
+pacf(res.model.traderInfo.har, main = "Figure 29:PACF of standardized residuals.")
+```
+The PACF plot reveals significant autocorrelation at the first lag, indicating a strong relationship between consecutive observations. Additionally, there is relatively high partial autocorrelation at other lags, suggesting remaining patterns unaccounted for by the model.
+
+## Choosing the best model
+Based on the models that were run, it can be identified that the quadratic model is the best model due to the following reasons:
+
+Highest Adjusted R-squared: The quadratic model achieved an adjusted R-squared of 0.8, indicating a strong explanatory power for the observed variations. While the harmonic model boasted a higher R-squared of 0.9, its complexity might suggest overfitting.
+
+Fitted Line Accuracy: Plotting the quadratic model against the trader series revealed a close alignment, affirming its efficacy in capturing the underlying trend.
+
+Residual Analysis: Examination of the residuals showed a predominantly normal distribution, with a manageable residual error of 26.27, superior to other models. Though the ACF plot indicated some autocorrelation, the PACF plot displayed significantly lower partial autocorrelation compared to alternative models.
+
+Coefficient Significance: All coefficients in the quadratic model exhibited statistically significant p-values.
+
+
+# Forecast: Quadratic Model
+```{r}
+t_prediction <- time(traderInfo)
+dataFreq <- frequency(traderInfo)
+dataFreq
+h <- 5
+
+lastTimePoint <- t[length(t_prediction)]
+aheadTimes <- data.frame(t = seq(lastTimePoint+(1/dataFreq), lastTimePoint+h*(1/dataFreq), 1/dataFreq),
+                         t2 =  seq(lastTimePoint+(1/dataFreq), lastTimePoint+h*(1/dataFreq), 1/dataFreq)^2) 
+
+forecast_model <- predict(quadratic_model, newdata = aheadTimes, interval = "prediction")
+forecast_model
+```
+```{r}
+h <- 5 # 5 steps ahead forecasts
+t_time <- time(traderInfo)
+
+lastTimePoint <- t[length(t_time)]
+aheadTimes <- data.frame(t = seq(lastTimePoint+(1/dataFreq), lastTimePoint+h*(1/dataFreq), 1/dataFreq),
+                         t2 =  seq(lastTimePoint+(1/dataFreq), lastTimePoint+h*(1/dataFreq), 1/dataFreq)^2) 
+
+forecast_model <- predict(quadratic_model, newdata = aheadTimes, interval = "prediction")
+forecast_model
+```
+The above statistics showcases the forecast values for the next 5 trading days along with a 95% confidence interval that the trading returns would fall in between those figures.
+
+```{r}
+plot(traderInfo, xlim= c(t[1],aheadTimes$t[nrow(aheadTimes)]), ylim = c(-50,300), ylab = "Investment Return",
+     main = "Figure 30:Forecasts for the next consecutive 5 days from quadratic model.")
+
+lines(ts(as.vector(forecast_model[,3]), start = aheadTimes$t[1],frequency = dataFreq), col="blue", type="l")
+lines(ts(as.vector(forecast_model[,1]), start = aheadTimes$t[1],frequency = dataFreq), col="red", type="l")
+lines(ts(as.vector(forecast_model[,2]), start = aheadTimes$t[1],frequency = dataFreq), col="blue", type="l")
+legend("topleft", lty=1, pch=1, col=c("black","blue","red"), 
+       c("Data","5% forecast limits", "Forecasts"))
+```
+From the aobve graph, it is visible that the traders can expect an increasing return in the next 5 consecutive days, as it shows a clear upward trend. 
+
+# Conclusion
+Based on the overall analysis, it can be concluded that although the initial time series plot was non-stationary due to being unable to capture seasonality and trends correctly, it was later observed that there was seasonality in the series through the existence of repetitive patterns. Four models were looked at in this report, from which quadratic was deemed to be the best fit as it displayed the highest variation of 80% and statistically significant coeffients. The linear model  only explained ~60% of the variation in the data and the coefficients were deemed as statistically non-significant, indicating no relationship. The seasonal model without the intercept, displayed major seasonality in the data with lower coefficients. However, when the model was run again without the intercept, it failed to capture significant variance and could not accurately capture seasonality. 
+
+On the other hand, although the the cosine model proved to be a strong fit with 90% variation. When it came to the residual analysis majority of the residuals were not normally distributed and the ACF plots portrayed significant autocorrelation.
+
+The forecast for the next 5 consecutive trading days implies that the returns are expected to increase in the near future proving it to be profitable for traders.
+
+#References
+
+Demirhan, H. (2024) _Module 1 - Basic Plots, Examples, and Fundamental Concepts_,https://rmit.instructure.com/courses/112639/files/30914858?wrap=1, accessed 5 April 2024.
+
+Demirhan, H. (2024), _MATH1318_Module2_notes.pdf_,https://rmit.instructure.com/courses/112639/files/30914858?wrap=1, accessed 5 April 2024.
+
+Demirhan, H. (2024), _solutionModule2Tasks_2024_.R,https://rmit.instructure.com/courses/112639/files/30914858?wrap=1, accessed 5 April 2024.
+
+
